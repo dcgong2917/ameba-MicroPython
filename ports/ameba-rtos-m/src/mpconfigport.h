@@ -27,6 +27,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "ameba_soc.h"
+
+// The Ameba RTC hardware uses Unix timestamps (epoch 1970-01-01).  Define
+// this so that timeutils_seconds_since_epoch_to_struct_time and
+// timeutils_seconds_since_epoch use the same epoch, avoiding a ~30-year
+// date offset.  This also affects machine.RTC and the time module.
+#define MICROPY_EPOCH_IS_1970 (1)
+
 // Python internal features.
 #ifndef MICROPY_CONFIG_ROM_LEVEL
 #define MICROPY_CONFIG_ROM_LEVEL            (MICROPY_CONFIG_ROM_LEVEL_EXTRA_FEATURES)
@@ -122,6 +129,7 @@
 #define MICROPY_PY_MACHINE_ADC_DEINIT        (1)
 #define MICROPY_PY_MACHINE_PWM               (1)
 #define MICROPY_PY_MACHINE_PWM_INCLUDEFILE   "src/machine_pwm.c"
+#define MICROPY_PY_MACHINE_RTC               (1)
 
 
 #define MICROPY_PY_NETWORK (1)
