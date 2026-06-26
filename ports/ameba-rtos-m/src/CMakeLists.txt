@@ -88,6 +88,7 @@ set(MICROPY_SOURCE_QSTR
     ${MICROPY_PORT_DIR}/src/network_common.c
     ${MICROPY_PORT_DIR}/src/machine_pin.c
     ${MICROPY_PORT_DIR}/src/machine_timer.c
+    ${MICROPY_PORT_DIR}/src/machine_uart.c
 )
 
 

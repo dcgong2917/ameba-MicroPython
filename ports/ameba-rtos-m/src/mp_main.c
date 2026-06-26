@@ -95,6 +95,14 @@ soft_reset_exit:
 
     mp_printf(MP_PYTHON_PRINTER, "MPY: soft reboot\n");
 
+    #if MICROPY_PY_MACHINE_UART
+    // Disable UART RX interrupts before the GC heap (which backs the RX ring
+    // buffers) is swept — the static UART objects survive soft reset with the
+    // SDK ISR still armed and would otherwise write into freed memory.
+    extern void machine_uart_deinit_all(void);
+    machine_uart_deinit_all();
+    #endif
+
     gc_sweep_all();
     #if MICROPY_PY_THREAD
     mp_thread_deinit();

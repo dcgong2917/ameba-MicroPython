@@ -113,6 +113,10 @@
 #define MICROPY_PY_MACHINE_DISABLE_IRQ_ENABLE_IRQ (1)
 #define MICROPY_PY_MACHINE_PIN_MAKE_NEW     mp_pin_make_new
 
+#define MICROPY_PY_MACHINE_UART              (1)
+#define MICROPY_PY_MACHINE_UART_INCLUDEFILE  "src/machine_uart.c"
+#define MICROPY_PY_MACHINE_UART_IRQ          (0)
+
 
 #define MICROPY_PY_NETWORK (1)
 #define MICROPY_PY_NETWORK_WLAN                        (1)
