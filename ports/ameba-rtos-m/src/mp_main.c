@@ -103,6 +103,13 @@ soft_reset_exit:
     machine_uart_deinit_all();
     #endif
 
+    #if MICROPY_PY_MACHINE_I2C
+    // Free I2C peripherals so a re-init after soft reset starts clean (the static
+    // I2C objects survive soft reset with the SDK peripheral still enabled).
+    extern void machine_i2c_deinit_all(void);
+    machine_i2c_deinit_all();
+    #endif
+
     gc_sweep_all();
     #if MICROPY_PY_THREAD
     mp_thread_deinit();
