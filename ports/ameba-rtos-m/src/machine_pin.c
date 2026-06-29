@@ -238,7 +238,9 @@ static const machine_pin_board_obj_t machine_pin_board_obj = {
 // machine_pin_find
 // ---------------------------------------------------------------------------
 static machine_pin_obj_t *machine_pin_find(mp_obj_t pin_in) {
-    if (mp_obj_is_int(pin_in)) {
+    if (mp_obj_is_type(pin_in, &machine_pin_type)) {
+        return MP_OBJ_TO_PTR(pin_in);
+    } else if (mp_obj_is_int(pin_in)) {
         int val = mp_obj_get_int(pin_in);
         if (IS_VALID_PINNAME(val)) {
             return &machine_pin_obj_table[val];
@@ -251,6 +253,16 @@ static machine_pin_obj_t *machine_pin_find(mp_obj_t pin_in) {
         }
     }
     mp_raise_ValueError(MP_ERROR_TEXT("invalid pin"));
+}
+
+// HAL: resolve a user object (Pin instance, int PinName, or board string such
+// as "PA2") to a validated PinName, raising ValueError on an unknown pin.
+// Unlike mp_hal_get_pin_obj() — which assumes its argument is already a Pin
+// object and blindly dereferences it — this validates the input, so callers
+// that accept raw user pin arguments (e.g. machine.I2S sck/ws/sd) get a proper
+// exception instead of silently mapping garbage to PA0.
+mp_hal_pin_obj_t mp_hal_pin_resolve(void *pin_in) {
+    return machine_pin_find((mp_obj_t)pin_in)->id;
 }
 
 // ---------------------------------------------------------------------------

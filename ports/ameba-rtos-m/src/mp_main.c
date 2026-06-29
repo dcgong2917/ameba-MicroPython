@@ -117,6 +117,15 @@ soft_reset_exit:
     machine_pwm_deinit_all();
     #endif
 
+    #if MICROPY_PY_MACHINE_I2S
+    // Tear down any live SPORT hardware and drop the heap-allocated I2S
+    // instance pointers (rooted in MP_STATE_PORT, which survives soft reset)
+    // before the GC heap is swept — otherwise the next session would reuse a
+    // dangling pointer and fault in deinit.
+    extern void machine_i2s_deinit_all(void);
+    machine_i2s_deinit_all();
+    #endif
+
     gc_sweep_all();
     #if MICROPY_PY_THREAD
     mp_thread_deinit();

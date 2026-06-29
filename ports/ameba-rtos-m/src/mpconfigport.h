@@ -132,6 +132,9 @@
 #define MICROPY_PY_MACHINE_RTC               (1)
 #define MICROPY_PY_MACHINE_WDT               (1)
 #define MICROPY_PY_MACHINE_WDT_INCLUDEFILE   "src/machine_wdt.c"
+#define MICROPY_PY_MACHINE_I2S               (1)
+#define MICROPY_PY_MACHINE_I2S_INCLUDEFILE   "src/machine_i2s.c"
+#define MICROPY_PY_MACHINE_I2S_RING_BUF      (1)
 
 
 #define MICROPY_PY_NETWORK (1)
