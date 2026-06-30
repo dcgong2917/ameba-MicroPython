@@ -29,12 +29,21 @@
 // (PA12/26-28, PA29-31/PB17, PB18-21); Group3 (PB23-26) is the ONLY group with no
 // flash/OSPI/PSRAM overlap, so it is the safe default. The previous default
 // (PA26/27/28/12) sat on OSPI/PSRAM pins and never transferred. Override via
-// sck=/mosi=/miso=/cs=. (PB25/PB26 exceed the machine.Pin GPIO range but the SPI
-// pinmux accepts them.)
+// sck=/mosi=/miso=. (PB25 exceeds the machine.Pin GPIO range but the SPI pinmux
+// accepts it.)
+//
+// Chip-select is NOT managed here, matching the upstream machine.SPI convention
+// (esp32 sets spics_io_num=-1, rp2 never touches CSn): the application drives CS
+// itself via a machine.Pin. The Ameba mbed HAL spi_init(), however, mandates a
+// CS pad and unconditionally muxes it, so we hand it a fixed scratch pad (PB_26)
+// and immediately release that pad back to GPIO after init. The SSI core's
+// internal SPI_SER (set by SSI_Init) drives the transfer regardless of whether a
+// CS pad is muxed, so transfers work with no physical CS line and PB_26 stays
+// free for reuse.
 #define SPI0_DEFAULT_SCK   (PB_23)   // SPI0_CLK
 #define SPI0_DEFAULT_MOSI  (PB_24)   // SPI0_MOSI
 #define SPI0_DEFAULT_MISO  (PB_25)   // SPI0_MISO
-#define SPI0_DEFAULT_CS    (PB_26)   // SPI0_CS
+#define SPI0_SCRATCH_CS    (PB_26)   // HAL-mandated CS pad, released to GPIO after init
 
 typedef struct _machine_spi_obj_t {
     mp_obj_base_t base;
@@ -48,7 +57,8 @@ typedef struct _machine_spi_obj_t {
     uint16_t sck;          // PinName
     uint16_t mosi;         // PinName
     uint16_t miso;         // PinName
-    uint16_t cs;           // PinName (hardware chip-select)
+    uint16_t cs;           // PinName: HAL-mandated scratch CS pad, released to GPIO
+                           // after init (not user-visible; CS is driven by the app)
     bool     initialized;
 } machine_spi_obj_t;
 
@@ -98,19 +108,19 @@ static void machine_spi_print(const mp_print_t *print, mp_obj_t self_in, mp_prin
     int mosin = (self->mosi < PB_0) ? (int)self->mosi : (int)(self->mosi - PB_0);
     const char *misop = (self->miso < PB_0) ? "PA" : "PB";
     int mison = (self->miso < PB_0) ? (int)self->miso : (int)(self->miso - PB_0);
-    const char *csp = (self->cs < PB_0) ? "PA" : "PB";
-    int csn = (self->cs < PB_0) ? (int)self->cs : (int)(self->cs - PB_0);
-    mp_printf(print, "SPI(%u, baudrate=%u, polarity=%u, phase=%u, bits=%u, firstbit=%u, sck=%s%d, mosi=%s%d, miso=%s%d, cs=%s%d)",
+    mp_printf(print, "SPI(%u, baudrate=%u, polarity=%u, phase=%u, bits=%u, firstbit=%u, sck=%s%d, mosi=%s%d, miso=%s%d)",
         self->spi_id, self->baudrate, self->polarity, self->phase, self->bits, self->firstbit,
-        sckp, sckn, mosip, mosin, misop, mison, csp, csn);
+        sckp, sckn, mosip, mosin, misop, mison);
 }
 
 // ---- init_helper: (re)configure the peripheral ----
 
 static void mp_machine_spi_init_helper(machine_spi_obj_t *self, size_t n_args,
     const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    // No `cs` argument: machine.SPI does not manage chip-select, matching the
+    // upstream esp32/rp2 ports. The application drives CS via a machine.Pin.
     enum { ARG_baudrate, ARG_polarity, ARG_phase, ARG_bits, ARG_firstbit,
-           ARG_sck, ARG_mosi, ARG_miso, ARG_cs };
+           ARG_sck, ARG_mosi, ARG_miso };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_baudrate, MP_ARG_INT, {.u_int = -1} },
         { MP_QSTR_polarity, MP_ARG_INT, {.u_int = -1} },
@@ -120,7 +130,6 @@ static void mp_machine_spi_init_helper(machine_spi_obj_t *self, size_t n_args,
         { MP_QSTR_sck,      MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_mosi,     MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_miso,     MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
-        { MP_QSTR_cs,       MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
@@ -135,7 +144,7 @@ static void mp_machine_spi_init_helper(machine_spi_obj_t *self, size_t n_args,
         self->sck = SPI0_DEFAULT_SCK;
         self->mosi = SPI0_DEFAULT_MOSI;
         self->miso = SPI0_DEFAULT_MISO;
-        self->cs = SPI0_DEFAULT_CS;
+        self->cs = SPI0_SCRATCH_CS;
     }
 
     if (args[ARG_baudrate].u_int > 0) {
@@ -168,9 +177,6 @@ static void mp_machine_spi_init_helper(machine_spi_obj_t *self, size_t n_args,
     if (args[ARG_miso].u_obj != MP_OBJ_NULL) {
         self->miso = machine_spi_get_pin(args[ARG_miso].u_obj);
     }
-    if (args[ARG_cs].u_obj != MP_OBJ_NULL) {
-        self->cs = machine_spi_get_pin(args[ARG_cs].u_obj);
-    }
 
     // Tear down a previous configuration before re-init.
     if (self->initialized) {
@@ -185,6 +191,11 @@ static void mp_machine_spi_init_helper(machine_spi_obj_t *self, size_t n_args,
 
     spi_init(&self->spi, (PinName)self->mosi, (PinName)self->miso,
         (PinName)self->sck, (PinName)self->cs);
+    // The mbed HAL just muxed the scratch CS pad to PINMUX_FUNCTION_SPI. We do not
+    // manage CS (the app drives it via machine.Pin), so release the pad back to
+    // GPIO right away. Transfers still work: the SSI core's internal SPI_SER, set
+    // by SSI_Init, gates the clock independently of whether a CS pad is muxed.
+    Pinmux_Config((u8)self->cs, PINMUX_FUNCTION_GPIO);
     // SPI mode number = (CPOL << 1) | CPHA.
     spi_format(&self->spi, self->bits, (self->polarity << 1) | self->phase, 0);
     spi_frequency(&self->spi, (int)self->baudrate);
@@ -216,9 +227,11 @@ static void machine_spi_init(mp_obj_base_t *self_in, size_t n_args,
     mp_machine_spi_init_helper(self, n_args, pos_args, kw_args);
 }
 
-// The SDK's spi_free() only disables the peripheral; it leaves the four pads
-// muxed to PINMUX_FUNCTION_SPI. Restore them to GPIO so they can be reused as
-// machine.Pin (and so a later re-init/reconfig starts from a clean pinmux).
+// The SDK's spi_free() only disables the peripheral; it leaves the sck/mosi/miso
+// pads muxed to PINMUX_FUNCTION_SPI. Restore them to GPIO so they can be reused as
+// machine.Pin (and so a later re-init/reconfig starts from a clean pinmux). The
+// scratch CS pad was already returned to GPIO right after spi_init, but re-doing
+// it here is harmless.
 static void machine_spi_pins_release(machine_spi_obj_t *self) {
     Pinmux_Config((u8)self->sck, PINMUX_FUNCTION_GPIO);
     Pinmux_Config((u8)self->mosi, PINMUX_FUNCTION_GPIO);
