@@ -99,8 +99,11 @@ static mp_obj_t mp_machine_adc_make_new(const mp_obj_type_t *type,
             mp_raise_ValueError(MP_ERROR_TEXT("ADC channel out of range"));
         }
     } else {
-        // Pin object: ADC(Pin("PB19"))
-        pin = mp_hal_get_pin_obj(source);
+        // Pin object / pin name: ADC(Pin("PB19")), ADC("PB19").
+        // mp_hal_pin_resolve validates the type via machine_pin_find and
+        // raises a clean ValueError on a non-pin argument, instead of
+        // blindly dereferencing it as a pointer (undefined behaviour).
+        pin = mp_hal_pin_resolve(source);
         ch = adc_pin_to_channel(pin);
         if (ch < 0) {
             mp_raise_ValueError(MP_ERROR_TEXT("Pin doesn't have ADC capabilities"));
